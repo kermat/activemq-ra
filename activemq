@@ -1,0 +1,134 @@
+#!/bin/sh
+#
+#                  ActiveMQ OCF Resource Agent
+#
+# Original Author: Matt Kereczman
+#######################################################################
+# Initialization:
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+# set user to root (default) if not specified
+OCF_RESKEY_user="${OCF_RESKEY_user:-root}"
+# set activemq_dir to /opt/activemq (default) if not specified
+OCF_RESKEY_user="${OCF_RESKEY_user:-root}"
+
+#######################################################################
+
+meta_data() {
+	cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="activemq" version="0.9">
+<version>1.0</version>
+
+<longdesc lang="en">
+This is a resource agent for managing an ActiveMQ broker. Eventually, 
+this agent _could_ be used to manage producers and consumers as well.
+
+Developed using ActiveMQ 5.14.4
+</longdesc>
+<shortdesc lang="en">ActiveMQ broker</shortdesc>
+
+<parameters>
+<parameter name="activemq_dir" unique="0">
+<longdesc lang="en">
+Location of the activemq directory where bin/activemq, conf/activemq.xml,
+data/activemq.pid, etc. can be found for the ActiveMQ broker. Typically, 
+this is /opt/activemq or /usr/share/apache-activemq-5.x.x. 
+</longdesc>
+<shortdesc lang="en">ActiveMQ directory</shortdesc>
+<content type="string" default="/opt/activemq" />
+</parameter>
+<parameter name="user" unique="0">
+<longdesc lang="en">
+User to run the ActiveMQ broker.
+</longdesc>
+<shortdesc lang="en">ActiveMQ user</shortdesc>
+<content type="string" default="root" />
+</parameter>
+</parameters>
+<actions>
+<action name="start"        timeout="20" />
+<action name="stop"         timeout="20" />
+<action name="monitor"      timeout="20" interval="10" depth="0" />
+<action name="meta-data"    timeout="5" />
+<action name="validate-all"   timeout="20" />
+</actions>
+</resource-agent>
+END
+}
+
+#######################################################################
+
+activemq_usage() {
+	cat <<END
+usage: $0 {start|stop|monitor|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+END
+}
+
+# check if we should run as non-root user
+if [ "${OCF_RESKEY_user}" != "root" ]; then
+    cmd="su - ${OCF_RESKEY_user} -c ${OCF_RESKEY_activemq_dir}/bin/activemq"
+else
+    cmd="${OCF_RESKEY_activemq_dir}/bin/activemq"
+fi
+
+activemq_start() {
+    logger "activemq start"
+    activemq_monitor
+    if [ $? =  $OCF_SUCCESS ]; then
+	return $OCF_SUCCESS
+    fi
+
+    eval "$cmd\ start" >/dev/null 2>&1   
+}
+
+activemq_stop() {
+    logger "activemq stop"
+    activemq_monitor
+    if [ $? =  $OCF_SUCCESS ]; then
+	eval "$cmd\ stop" >/dev/null 2>&1
+    fi
+}
+
+activemq_monitor() {
+    # Monitor _MUST!_ differentiate correctly between running
+    # (SUCCESS), failed (ERROR) or _cleanly_ stopped (NOT RUNNING).
+    # That is THREE states, not just yes/no.
+    logger "activemq monitor"
+    rc=`eval "$cmd\ status" >/dev/null 2>&1; echo $?`
+    if [ $rc -eq 0 ]; then
+        return $OCF_SUCCESS
+    elif [ $rc -eq 1 ]; then
+        return $OCF_NOT_RUNNING
+    else
+        return $OCF_ERR_GENERIC
+    fi
+}
+
+activemq_validate() {
+    return $OCF_SUCCESS
+}
+
+case $__OCF_ACTION in
+meta-data)	meta_data
+		exit $OCF_SUCCESS
+		;;
+start)		activemq_start;;
+stop)		activemq_stop;;
+monitor)	activemq_monitor;;
+validate-all)	activemq_validate;;
+usage|help)	activemq_usage
+		exit $OCF_SUCCESS
+		;;
+*)		activemq_usage
+		exit $OCF_ERR_UNIMPLEMENTED
+		;;
+esac
+rc=$?
+ocf_log debug "${OCF_RESOURCE_INSTANCE} $__OCF_ACTION : $rc"
+exit $rc
+
