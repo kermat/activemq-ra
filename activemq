@@ -11,7 +11,7 @@
 # set user to root (default) if not specified
 OCF_RESKEY_user="${OCF_RESKEY_user:-root}"
 # set activemq_dir to /opt/activemq (default) if not specified
-OCF_RESKEY_user="${OCF_RESKEY_user:-root}"
+OCF_RESKEY_activemq_dir="${OCF_RESKEY_activemq_dir:-/opt/activemq}"
 
 #######################################################################
 
