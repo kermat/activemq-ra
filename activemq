@@ -1,16 +1,24 @@
 #!/bin/sh
 #
-#                  ActiveMQ OCF Resource Agent
+#               ActiveMQ OCF Resource Agent
 #
-# Original Author: Matt Kereczman
+# Description:  Manages an Apache ActiveMQ broker; could be enhanced
+#               to manage consumers and producers.
+#
+# License:      GNU General Public License (GPL)
+#
+#               (c) 2017 Matt Kereczman / LINBIT USA
 #######################################################################
 # Initialization:
 
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
 . ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
-# set user to root (default) if not specified
+#######################################################################
+
+## set default values
+# set user to root if not specified
 OCF_RESKEY_user="${OCF_RESKEY_user:-root}"
-# set activemq_dir to /opt/activemq (default) if not specified
+# set activemq_dir to /opt/activemq if not specified
 OCF_RESKEY_activemq_dir="${OCF_RESKEY_activemq_dir:-/opt/activemq}"
 
 #######################################################################
@@ -26,20 +34,37 @@ meta_data() {
 This is a resource agent for managing an ActiveMQ broker. Eventually, 
 this agent _could_ be used to manage producers and consumers as well.
 
-Developed using ActiveMQ 5.14.4
+Originally developed using ActiveMQ 5.14.4. There are differences
+in versions older than 5.11.0 that have not been tested with this RA.
+
+Environment variables for ActiveMQ are set/scanned for on startup in
+the following places in the following order:
+ /etc/default/activemq
+ \$HOME/.activemqrc
+ \$INSTALLDIR/apache-activemq-\$VERSION>/bin/env
+
+The first existing file is read exclusively - all other files are ignored. 
+Undefined values are discovered in a automated way by activemq.
+
+For Master/Slave configurations, simply set "ACTIVEMQ_DATA" in your
+environment configuration to point to shared storage accessible by both
+Master/Slave (shared filesystem or shared database), and clone the 
+activemq primitive.
 </longdesc>
-<shortdesc lang="en">ActiveMQ broker</shortdesc>
+<shortdesc lang="en">ActiveMQ RA</shortdesc>
 
 <parameters>
+
 <parameter name="activemq_dir" unique="0">
 <longdesc lang="en">
 Location of the activemq directory where bin/activemq, conf/activemq.xml,
-data/activemq.pid, etc. can be found for the ActiveMQ broker. Typically, 
-this is /opt/activemq or /usr/share/apache-activemq-5.x.x. 
+data/activemq.pid, ... can be found for the ActiveMQ environment. 
+Typically, this is /opt/activemq or /usr/share/apache-activemq-5.x.x. 
 </longdesc>
 <shortdesc lang="en">ActiveMQ directory</shortdesc>
 <content type="string" default="/opt/activemq" />
 </parameter>
+
 <parameter name="user" unique="0">
 <longdesc lang="en">
 User to run the ActiveMQ broker.
@@ -47,13 +72,15 @@ User to run the ActiveMQ broker.
 <shortdesc lang="en">ActiveMQ user</shortdesc>
 <content type="string" default="root" />
 </parameter>
+
 </parameters>
+
 <actions>
-<action name="start"        timeout="20" />
-<action name="stop"         timeout="20" />
-<action name="monitor"      timeout="20" interval="10" depth="0" />
+<action name="start"        timeout="30" />
+<action name="stop"         timeout="60" />
+<action name="monitor"      timeout="30" interval="20" depth="0" />
 <action name="meta-data"    timeout="5" />
-<action name="validate-all"   timeout="20" />
+<action name="validate-all" timeout="20" />
 </actions>
 </resource-agent>
 END
@@ -77,20 +104,18 @@ else
 fi
 
 activemq_start() {
-    logger "activemq start"
     activemq_monitor
     if [ $? =  $OCF_SUCCESS ]; then
-	return $OCF_SUCCESS
+	    return $OCF_SUCCESS
     fi
 
     eval "$cmd\ start" >/dev/null 2>&1   
 }
 
 activemq_stop() {
-    logger "activemq stop"
     activemq_monitor
     if [ $? =  $OCF_SUCCESS ]; then
-	eval "$cmd\ stop" >/dev/null 2>&1
+	    eval "$cmd\ stop" >/dev/null 2>&1
     fi
 }
 
@@ -98,7 +123,6 @@ activemq_monitor() {
     # Monitor _MUST!_ differentiate correctly between running
     # (SUCCESS), failed (ERROR) or _cleanly_ stopped (NOT RUNNING).
     # That is THREE states, not just yes/no.
-    logger "activemq monitor"
     rc=`eval "$cmd\ status" >/dev/null 2>&1; echo $?`
     if [ $rc -eq 0 ]; then
         return $OCF_SUCCESS
@@ -110,6 +134,17 @@ activemq_monitor() {
 }
 
 activemq_validate() {
+    # check that the activemq instance is present
+    if ! [ -d ${OCF_RESKEY_activemq_dir} ]; then
+        ocf_log err "$OCF_RESKEY_activemq_dir does not exist or is not a directory!"
+        exit $OCF_ERR_INSTALLED
+    fi
+    # check that the activemq script is present
+    if ! [ -x ${OCF_RESKEY_activemq_dir}/bin/activemq ]; then
+        ocf_log err "${OCF_RESKEY_activemq_dir}/bin/activemq does not exist or is not executable!"
+        exit $OCF_ERR_INSTALLED
+    fi
+
     return $OCF_SUCCESS
 }
 
@@ -131,4 +166,3 @@ esac
 rc=$?
 ocf_log debug "${OCF_RESOURCE_INSTANCE} $__OCF_ACTION : $rc"
 exit $rc
-
